@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
+#include <linux/mutex.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <linux/unaligned.h>
@@ -543,6 +544,7 @@ struct imx585 {
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data supplies[IMX585_NUM_SUPPLIES];
 
+	struct mutex lock;
 	struct v4l2_ctrl_handler ctrl_handler;
 
 	/* Controls */
@@ -1041,6 +1043,10 @@ static int imx585_init_controls(struct imx585 *imx585)
 	int ret;
 
 	ret = v4l2_ctrl_handler_init(hdl, 32);
+	if (ret)
+		return ret;
+
+	hdl->lock = &imx585->lock;
 
 	/* Read-only, updated per mode */
 	imx585->pixel_rate = v4l2_ctrl_new_std(hdl, &imx585_ctrl_ops,
@@ -1619,7 +1625,10 @@ static int imx585_probe(struct i2c_client *client)
 	if (!imx585)
 		return -ENOMEM;
 
+	mutex_init(&imx585->lock);
+
 	v4l2_i2c_subdev_init(&imx585->sd, client, &imx585_subdev_ops);
+	imx585->sd.state_lock = &imx585->lock;
 	imx585->clientdev = dev;
 	strscpy(imx585->sd.name, "imx585", sizeof(imx585->sd.name));
 	strscpy(imx585->sd.entity.name, "imx585", sizeof(imx585->sd.entity.name));
@@ -1725,6 +1734,7 @@ err_pm:
 	pm_runtime_disable(dev);
 	pm_runtime_set_suspended(dev);
 err_power_off:
+	mutex_destroy(&imx585->lock);
 	imx585_power_off(dev);
 	return ret;
 }
@@ -1743,6 +1753,8 @@ static void imx585_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(imx585->clientdev))
 		imx585_power_off(imx585->clientdev);
 	pm_runtime_set_suspended(imx585->clientdev);
+
+	mutex_destroy(&imx585->lock);
 }
 
 static DEFINE_RUNTIME_DEV_PM_OPS(imx585_pm_ops, imx585_power_off,
