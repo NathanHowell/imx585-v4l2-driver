@@ -200,6 +200,7 @@
 										status = "okay";
 										port-index = <1>;
 										bus-width = <4>; /* 4 lanes */
+										data-lanes = <1 2 3 4>; /* optional: specify lane mapping */
 										remote-endpoint = <&imx585_csi_in0>;
 									};
 								};
@@ -272,6 +273,7 @@
 										status = "okay";
 										port-index = <2>;
 										bus-width = <4>; /* 4 lanes */
+										data-lanes = <1 2 3 4>; /* optional: specify lane mapping */
 										remote-endpoint = <&imx585_csi_in1>;
 									};
 								};
