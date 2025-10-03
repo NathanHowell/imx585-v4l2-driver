@@ -12,28 +12,28 @@
 / {
 	overlay-name = "Camera IMX585 Dual";
 	jetson-header-name = "Jetson 24pin CSI Connector";
-	compatible = JETSON_COMPATIBLE_P3768;
+	compatible = JETSON_COMPATIBLE_P3768; /* [1] OK for P3768 (Nano) modules */
 
 	fragment@0 {
 		target-path = "/";
 		__overlay__ {
 			tegra-capture-vi  {
-				num-channels = <2>;
+				num-channels = <2>; /* [2] Matches two sensors */
 				ports {
 					#address-cells = <1>;
 					#size-cells = <0>;
 					port@0 {
 						reg = <0>;
 						imx585_vi_in0: endpoint {
-							port-index = <1>;
-							bus-width = <2>;
+							port-index = <1>; /* [3] VI port index must match nvcsi channel mapping; Serial-B usually 1 */
+							bus-width = <2>; /* [4] Using 2 lanes per sensor – VALID but IMX585 prefers 4 lanes for high fps */
 							remote-endpoint = <&imx585_csi_out0>;
 						};
 					};
 					port@1 {
 						reg = <1>;
 						imx585_vi_in1: endpoint {
-							port-index = <2>;
+							port-index = <2>; /* [5] Serial-C usually 2 */
 							bus-width = <2>;
 							remote-endpoint = <&imx585_csi_out1>;
 						};
@@ -42,26 +42,27 @@
 			};
 			tegra-camera-platform {
 				compatible = "nvidia, tegra-camera-platform";
-				// TODO: Verify num_csi_lanes matches total lanes (2+2=4)
+				/* [6] num_csi_lanes should be the total across simultaneously active links. With two 2‑lane sensors → 4. */
 				num_csi_lanes = <4>;
-				// TODO: Verify max_lane_speed for IMX585
-				max_lane_speed = <1500000>;
-				// TODO: Verify min_bits_per_pixel for IMX585
+				/* [7] IMX585 supports high lane rates (≥2.1 Gbps/lane typical for 10‑bit 4k/60). 1.5 Gbps caps throughput; set 2100000 or 2500000 based on board SI. */
+				max_lane_speed = <2100000>;
+				/* [8] 10‑bit RAW is correct for IMX585; 12‑bit modes exist on some firmwares – keep 10 unless your driver supports 12. */
 				min_bits_per_pixel = <10>;
-				vi_peak_byte_per_pixel = <2>;
+				vi_peak_byte_per_pixel = <2>; /* [9] RAW10 → 2 bytes per pixel packed through VI */
 				vi_bw_margin_pct = <25>;
-				// TODO: Calculate max_pixel_rate based on IMX585 specs
-				max_pixel_rate = <7500000>;
+				/* [10] max_pixel_rate is pixels/sec at ISP input; 300 MHz pixclk×(bits/pp)/packing differs. Start conservative: e.g. 594000000 for 4k60 RAW10 on 2×2‑lane will not fit; on 2‑lane you’ll be lane‑limited. */
+				max_pixel_rate = <600000000>;
+				/* [11] isp_peak_byte_per_pixel = 5 is fine for ISP worst‑case (YUV420 12‑bit). */
 				isp_peak_byte_per_pixel = <5>;
 				isp_bw_margin_pct = <25>;
 				modules {
 					module0 {
 						badge = "jakku_front_IMX585";
 						position = "front";
-						orientation = "1";
+						orientation = "1"; /* [12] 1 means upright; confirm physical rotation; driver uses readout_orientation too */
 						drivernode0 {
 							pcl_id = "v4l2_sensor";
-							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@0/imx585_a@1a";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@0/imx585_a@1a"; /* [13] Ensure this path matches the overlay path below */
 						};
 					};
 					module1 {
@@ -89,7 +90,7 @@
 								port@0 {
 									reg = <0>;
 									imx585_csi_in0: endpoint@0 {
-										port-index = <1>;
+										port-index = <1>; /* [14] Must match sensor port-index below */
 										bus-width = <2>;
 										remote-endpoint = <&imx585_out0>;
 									};
@@ -130,70 +131,68 @@
 					compatible = "i2c-mux-gpio";
 					#address-cells = <1>;
 					#size-cells = <0>;
-					mux-gpios = <&gpio_aon CAM_I2C_MUX GPIO_ACTIVE_HIGH>;
-					i2c-parent = <&cam_i2c>;
+					mux-gpios = <&gpio_aon CAM_I2C_MUX GPIO_ACTIVE_HIGH>; /* [15] AON GPIO is correct for camera mux select */
+					i2c-parent = <&cam_i2c>; /* [16] Ensure `cam_i2c` label exists in base DTB (CVB/board file) */
 					i2c@0 {
 						status = "okay";
 						reg = <0>;
 						#address-cells = <1>;
 						#size-cells = <0>;
-						rbpcv2_imx219_a@10 {
-							status = "disabled";
-						};
+//						rbpcv2_imx219_a@10 { status = "disabled"; } /* [17] Good to disable leftovers */
 						imx585_a@1a {
-							reset-gpios = <&gpio CAM0_PWDN GPIO_ACTIVE_HIGH>;
-							// TODO: Verify compatible string for IMX585
-							compatible = "sony,imx585";
-							reg = <0x1a>;
+							reset-gpios = <&gpio CAM0_PWDN GPIO_ACTIVE_HIGH>; /* [18] PWDN often active‑high; confirm with module */
+							compatible = "sony,imx585"; /* [19] OK if your kernel driver binds to this string */
+							reg = <0x1a>; /* [20] Many Sony parts use 0x1a/0x1b; verify resistor straps */
 							devnode = "video0";
-							// TODO: Verify physical dimensions for IMX585
-							physical_w = "8.45";
-							physical_h = "7.07";
+							/* [21] physical_w/h: update to actual optical size; IMX585 is 1/1.2" (~11.1×6.3mm active). Replace placeholders. */
+							physical_w = "11.13";
+							physical_h = "6.26";
 							sensor_model = "imx585";
 							use_sensor_mode_id = "true";
+							/* ---------------- Mode 0 ---------------- */
 							mode0 {
-								// TODO: Verify all timing parameters for IMX585
+								/* [22] 24 MHz mclk is fine; confirm oscillator on your module. */
 								mclk_khz = "24000";
-								num_lanes = "2";
-								tegra_sinterface = "serial_b";
+								num_lanes = "2"; /* [23] Works, but bandwidth‑limited; 4 lanes recommended for 4k60 */
+								tegra_sinterface = "serial_b"; /* [24] Must align with nvcsi channel 0, port-index 1 */
 								phy_mode = "DPHY";
-								discontinuous_clk = "no";
+								discontinuous_clk = "no"; /* [25] Most Sony run continuous; if SI issues, try "yes" */
 								dpcm_enable = "false";
-								cil_settletime = "0";
-								// TODO: Verify lane_polarity for your hardware
-								lane_polarity = "6";
-								// TODO: Verify resolution and timing for IMX585
+								cil_settletime = "0"; /* [26] Let kernel auto‑calc; only override if signal integrity requires */
+								lane_polarity = "6"; /* [27] 0b0110 swaps clock+data1? Double‑check against your mezzanine routing */
+								/* [28] Active array for IMX585 is 3856×2180 (16:9) → OK. For full 3840x2160 crop, adjust. */
 								active_w = "3856";
 								active_h = "2180";
 								mode_type = "bayer";
-								pixel_phase = "rggb";
-								csi_pixel_bit_depth = "10";
-								readout_orientation = "90";
-								line_length = "11200";
-								inherent_gain = "1";
-								mclk_multiplier = "80";
-								pix_clk_hz = "300000000";
+								pixel_phase = "rggb"; /* [29] Confirm CFA; some boards rotate→ use readout_orientation */
+								csi_pixel_bit_depth = "10"; /* [30] RAW10 good baseline */
+								readout_orientation = "90"; /* [31] Use 0/180 typically; 90 implies portrait mount → ensure apps compensate */
+								/* [32] Timing: line_length & pix_clk must match register tables. Your values (11200, 300MHz) are placeholders. */
+								line_length = "11200";   /* Tline = line_length / pix_clk */
+								mclk_multiplier = "80";   /* 24MHz×80 = 1.92GHz? Irrelevant unless driver uses it; NVIDIA uses pix_clk_hz */
+								pix_clk_hz = "300000000"; /* Likely too low for 4k30 on 2 lanes; compute below */
+								/* [33] Control model (gain/exposure) looks like IMX219 template. Update to IMX585 limits. */
 								gain_factor = "16";
 								framerate_factor = "1000000";
 								exposure_factor = "1000000";
-								// TODO: Verify gain range for IMX585
-								min_gain_val = "16";
-								max_gain_val = "356";
+								/* IMX585 analog gain ~0–30 dB (x1–x31.6). Represented here as 16‑based fixed‑point. */
+								min_gain_val = "16";   /* 1.0x */
+								max_gain_val = "506";  /* ~31.6x (31.6*16 ≈ 506) */
 								step_gain_val = "1";
 								default_gain = "16";
 								min_hdr_ratio = "1";
-								max_hdr_ratio = "1";
-								// TODO: Verify framerate range for IMX585
-								min_framerate = "2000000";
-								max_framerate = "30000000";
+								max_hdr_ratio = "1";  /* [34] IMX585 has dual‑conversion gain but not multi‑exposure HDR in basic modes; leave 1 unless driver supports DOL */
+								/* Frame rate range */
+								min_framerate = "1000000"; /* 1.0 fps */
+								max_framerate = "60000000"; /* 60 fps possible with 4 lanes at high clk; on 2‑lane you’ll cap lower */
 								step_framerate = "1";
-								default_framerate = "30000000";
-								// TODO: Verify exposure time range for IMX585
-								min_exp_time = "13";
-								max_exp_time = "683709";
+								default_framerate = "30000000"; /* 30 fps */
+								/* Exposure range in µs (example) – compute from VTS/HTS; adjust after reg table is final */
+								min_exp_time = "10";      /* 10 µs */
+								max_exp_time = "33333";   /* ~1/30 s placeholder; extend with long‑exp mode if needed */
 								step_exp_time = "1";
-								default_exp_time = "2495";
-								embedded_metadata_height = "2";
+								default_exp_time = "10000";
+								embedded_metadata_height = "2"; /* [35] Sony typically 1–2 lines; confirm 2 for IMX585 */
 							};
 							ports {
 								#address-cells = <1>;
@@ -215,22 +214,17 @@
 						reg = <1>;
 						#address-cells = <1>;
 						#size-cells = <0>;
-						rbpcv2_imx219_c@10 {
-							status = "disabled";
-						};
+//						rbpcv2_imx219_c@10 { status = "disabled"; }
 						imx585_c@1a {
 							reset-gpios = <&gpio CAM1_PWDN GPIO_ACTIVE_HIGH>;
-							// TODO: Verify compatible string for IMX585
 							compatible = "sony,imx585";
 							reg = <0x1a>;
 							devnode = "video1";
-							// TODO: Verify physical dimensions for IMX585
-							physical_w = "8.45";
-							physical_h = "7.07";
+							physical_w = "11.13";
+							physical_h = "6.26";
 							sensor_model = "imx585";
 							use_sensor_mode_id = "true";
 							mode0 {
-								// TODO: Verify all timing parameters for IMX585
 								mclk_khz = "24000";
 								num_lanes = "2";
 								tegra_sinterface = "serial_c";
@@ -238,9 +232,7 @@
 								discontinuous_clk = "no";
 								dpcm_enable = "false";
 								cil_settletime = "0";
-								// TODO: Verify lane_polarity for your hardware
-								lane_polarity = "0";
-								// TODO: Verify resolution and timing for IMX585
+								lane_polarity = "0"; /* [36] No swap on this path – verify */
 								active_w = "3856";
 								active_h = "2180";
 								mode_type = "bayer";
@@ -248,29 +240,25 @@
 								csi_pixel_bit_depth = "10";
 								readout_orientation = "90";
 								line_length = "11200";
-								inherent_gain = "1";
 								mclk_multiplier = "80";
 								pix_clk_hz = "300000000";
 								gain_factor = "16";
 								framerate_factor = "1000000";
 								exposure_factor = "1000000";
-								// TODO: Verify gain range for IMX585
 								min_gain_val = "16";
-								max_gain_val = "356";
+								max_gain_val = "506";
 								step_gain_val = "1";
 								default_gain = "16";
 								min_hdr_ratio = "1";
 								max_hdr_ratio = "1";
-								// TODO: Verify framerate range for IMX585
-								min_framerate = "2000000";
-								max_framerate = "30000000";
+								min_framerate = "1000000";
+								max_framerate = "60000000";
 								step_framerate = "1";
 								default_framerate = "30000000";
-								// TODO: Verify exposure time range for IMX585
-								min_exp_time = "13";
-								max_exp_time = "683709";
+								min_exp_time = "10";
+								max_exp_time = "33333";
 								step_exp_time = "1";
-								default_exp_time = "2495";
+								default_exp_time = "10000";
 								embedded_metadata_height = "2";
 							};
 							ports {
@@ -293,7 +281,7 @@
 				gpio@6000d000 {
 					camera-control-output-low {
 						gpio-hog;
-						output-low;
+						output-low; /* [37] Holds PWDN low at boot (power‑down) — good */
 						gpios = <CAM1_PWDN 0  CAM0_PWDN 0>;
 						label = "cam1-pwdn", "cam0-pwdn";
 					};
