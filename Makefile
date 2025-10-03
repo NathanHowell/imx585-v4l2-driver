@@ -1,13 +1,18 @@
 obj-m += imx585.o
 
-KDIR ?= /lib/modules/$(shell uname -r)/build
+KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+INSTALL_MOD_DIR ?= kernel/drivers/media/i2c
 
-all:
-	make -C $(KDIR) M=$(shell pwd) modules
+.PHONY: all modules modules_install clean
 
-clean:
-	make -C $(KDIR)  M=$(shell pwd) clean
+all: modules
+
+modules:
+	$(MAKE) -C $(KERNEL_SRC) M=$(CURDIR) modules
+
+modules_install:
+	$(MAKE) -C $(KERNEL_SRC) M=$(CURDIR) \
+		INSTALL_MOD_DIR=$(INSTALL_MOD_DIR) modules_install
 
 %.dtbo: %.dts
 	dtc -@ -I dts -O dtb -o $@ $<
-
