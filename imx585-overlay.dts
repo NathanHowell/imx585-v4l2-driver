@@ -141,7 +141,7 @@
 						#size-cells = <0>;
 
 						/* -------- cam0 (enabled by default) -------- */
-						imx585_a@1a {
+						imx585_a: imx585_a@1a {
 							status = "okay"; /* default on */
 							reset-gpios = <&gpio CAM0_PWDN GPIO_ACTIVE_HIGH>;
 							compatible = "sony,imx585";
@@ -214,7 +214,7 @@
 						#size-cells = <0>;
 
 						/* -------- cam1 (disabled by default) -------- */
-						imx585_c@1a {
+						imx585_c: imx585_c@1a {
 							status = "disabled"; /* default off */
 							reset-gpios = <&gpio CAM1_PWDN GPIO_ACTIVE_HIGH>;
 							compatible = "sony,imx585";
@@ -298,11 +298,11 @@
 	/* ----------------------------------------------------------- */
 	__overrides__ {
 		/* Enable/disable cam0 (default: enabled) */
-		cam0 = <&{/bus@0/cam_i2cmux/i2c@0/imx585_a@1a}>, "status";
+		cam0 = <&imx585_a>, "status";
 		/* Values: "okay" to enable, "disabled" to disable */
 
 		/* Enable/disable cam1 (default: disabled) */
-		cam1 = <&{/bus@0/cam_i2cmux/i2c@1/imx585_c@1a}>, "status";
+		cam1 = <&imx585_c>, "status";
 		/* Values: "okay" to enable, "disabled" to disable */
 
 		/* One‑shot debug preset: force 2 lanes + 1.5 Gbps/lane and adjust platform lane total */
