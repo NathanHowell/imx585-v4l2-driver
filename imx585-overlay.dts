@@ -1,138 +1,304 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Definitions for IMX585 camera module on VC I2C bus
+
 /dts-v1/;
 /plugin/;
-/{
-	compatible = "brcm,bcm2835";
+
+#define CAM0_PWDN	TEGRA234_MAIN_GPIO(H, 6)
+#define CAM1_PWDN	TEGRA234_MAIN_GPIO(AC, 0)
+#define CAM_I2C_MUX 	TEGRA234_AON_GPIO(CC, 3)
+
+#include <dt-bindings/tegra234-p3767-0000-common.h>
+
+/ {
+	overlay-name = "Camera IMX585 Dual";
+	jetson-header-name = "Jetson 24pin CSI Connector";
+	compatible = JETSON_COMPATIBLE_P3768;
 
 	fragment@0 {
-		target = <&cam_endpoint>;
+		target-path = "/";
 		__overlay__ {
-			data-lanes = <1 2 3 4>;
-		};
-	};
-
-	fragment@1 {
-		target = <&cam_endpoint>;
-		__dormant__ {
-			data-lanes = <1 2>;
-		};
-	};
-
-	fragment@2 {
-		target = <&csi_ep>;
-		__overlay__ {
-			data-lanes = <1 2 3 4>;
-		};
-	};
-
-	fragment@3 {
-		target = <&csi_ep>;
-		__dormant__ {
-			data-lanes = <1 2>;
-		};
-	};
-
-	reg_frag: fragment@4 {
-		target = <&cam1_reg>;
-		cam_reg: __overlay__ {
-			startup-delay-us = <300000>;
-		};
-	};
-
-	reg_alwayson_frag: fragment@99 {
-		target = <&cam1_reg>;
-		__dormant__ {
-			regulator-always-on;
-		};
-	};
-
-	i2c_frag: fragment@100 {
-		target = <&i2c_csi_dsi>;
-		__overlay__ {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			status = "okay";
-
-			cam_node: imx585@1a {
-				compatible = "sony,imx585";
-				reg = <0x1a>;
-				clocks = <&cam1_clk>;
-
-				assigned-clocks      = <&cam1_clk>;
-				assigned-clock-rates = <24000000>;    /* Hz*/
-
-				rotation = <0>;
-				orientation = <0>;
-				sony,sync-mode = "internal-leader";
-
-				vana-supply = <&cam1_reg>;	/* 3.3v */
-				vdig-supply = <&cam_dummy_reg>;	/* 1.1v */
-				vddl-supply = <&cam_dummy_reg>;	/* 1.8v */
-
-				port {
-					cam_endpoint: endpoint {
-						remote-endpoint = <&csi_ep>;
-						clock-lanes = <0>;
-						link-frequencies =
-							/bits/ 64 <720000000>;
+			tegra-capture-vi  {
+				num-channels = <2>;
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						imx585_vi_in0: endpoint {
+							port-index = <1>;
+							bus-width = <2>;
+							remote-endpoint = <&imx585_csi_out0>;
+						};
+					};
+					port@1 {
+						reg = <1>;
+						imx585_vi_in1: endpoint {
+							port-index = <2>;
+							bus-width = <2>;
+							remote-endpoint = <&imx585_csi_out1>;
+						};
 					};
 				};
 			};
+			tegra-camera-platform {
+				compatible = "nvidia, tegra-camera-platform";
+				// TODO: Verify num_csi_lanes matches total lanes (2+2=4)
+				num_csi_lanes = <4>;
+				// TODO: Verify max_lane_speed for IMX585
+				max_lane_speed = <1500000>;
+				// TODO: Verify min_bits_per_pixel for IMX585
+				min_bits_per_pixel = <10>;
+				vi_peak_byte_per_pixel = <2>;
+				vi_bw_margin_pct = <25>;
+				// TODO: Calculate max_pixel_rate based on IMX585 specs
+				max_pixel_rate = <7500000>;
+				isp_peak_byte_per_pixel = <5>;
+				isp_bw_margin_pct = <25>;
+				modules {
+					module0 {
+						badge = "jakku_front_IMX585";
+						position = "front";
+						orientation = "1";
+						drivernode0 {
+							pcl_id = "v4l2_sensor";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@0/imx585_a@1a";
+						};
+					};
+					module1 {
+						badge = "jakku_rear_IMX585";
+						position = "rear";
+						orientation = "1";
+						drivernode0 {
+							pcl_id = "v4l2_sensor";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@1/imx585_c@1a";
+						};
+					};
+				};
+			};
+			bus@0 {
+				host1x@13e00000 {
+					nvcsi@15a00000 {
+						num-channels = <2>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						channel@0 {
+							reg = <0>;
+							ports {
+								#address-cells = <1>;
+								#size-cells = <0>;
+								port@0 {
+									reg = <0>;
+									imx585_csi_in0: endpoint@0 {
+										port-index = <1>;
+										bus-width = <2>;
+										remote-endpoint = <&imx585_out0>;
+									};
+								};
+								port@1 {
+									reg = <1>;
+									imx585_csi_out0: endpoint@1 {
+										remote-endpoint = <&imx585_vi_in0>;
+									};
+								};
+							};
+						};
+						channel@1 {
+							reg = <1>;
+							ports {
+								#address-cells = <1>;
+								#size-cells = <0>;
+								port@0 {
+									reg = <0>;
+									imx585_csi_in1: endpoint@2 {
+										port-index = <2>;
+										bus-width = <2>;
+										remote-endpoint = <&imx585_out1>;
+									};
+								};
+								port@1 {
+									reg = <1>;
+									imx585_csi_out1: endpoint@3 {
+										remote-endpoint = <&imx585_vi_in1>;
+									};
+								};
+							};
+						};
+					};
+				};
+				cam_i2cmux {
+					status = "okay";
+					compatible = "i2c-mux-gpio";
+					#address-cells = <1>;
+					#size-cells = <0>;
+					mux-gpios = <&gpio_aon CAM_I2C_MUX GPIO_ACTIVE_HIGH>;
+					i2c-parent = <&cam_i2c>;
+					i2c@0 {
+						status = "okay";
+						reg = <0>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						rbpcv2_imx219_a@10 {
+							status = "disabled";
+						};
+						imx585_a@1a {
+							reset-gpios = <&gpio CAM0_PWDN GPIO_ACTIVE_HIGH>;
+							// TODO: Verify compatible string for IMX585
+							compatible = "sony,imx585";
+							reg = <0x1a>;
+							devnode = "video0";
+							// TODO: Verify physical dimensions for IMX585
+							physical_w = "8.45";
+							physical_h = "7.07";
+							sensor_model = "imx585";
+							use_sensor_mode_id = "true";
+							mode0 {
+								// TODO: Verify all timing parameters for IMX585
+								mclk_khz = "24000";
+								num_lanes = "2";
+								tegra_sinterface = "serial_b";
+								phy_mode = "DPHY";
+								discontinuous_clk = "no";
+								dpcm_enable = "false";
+								cil_settletime = "0";
+								// TODO: Verify lane_polarity for your hardware
+								lane_polarity = "6";
+								// TODO: Verify resolution and timing for IMX585
+								active_w = "3856";
+								active_h = "2180";
+								mode_type = "bayer";
+								pixel_phase = "rggb";
+								csi_pixel_bit_depth = "10";
+								readout_orientation = "90";
+								line_length = "11200";
+								inherent_gain = "1";
+								mclk_multiplier = "80";
+								pix_clk_hz = "300000000";
+								gain_factor = "16";
+								framerate_factor = "1000000";
+								exposure_factor = "1000000";
+								// TODO: Verify gain range for IMX585
+								min_gain_val = "16";
+								max_gain_val = "356";
+								step_gain_val = "1";
+								default_gain = "16";
+								min_hdr_ratio = "1";
+								max_hdr_ratio = "1";
+								// TODO: Verify framerate range for IMX585
+								min_framerate = "2000000";
+								max_framerate = "30000000";
+								step_framerate = "1";
+								default_framerate = "30000000";
+								// TODO: Verify exposure time range for IMX585
+								min_exp_time = "13";
+								max_exp_time = "683709";
+								step_exp_time = "1";
+								default_exp_time = "2495";
+								embedded_metadata_height = "2";
+							};
+							ports {
+								#address-cells = <1>;
+								#size-cells = <0>;
+								port@0 {
+									reg = <0>;
+									imx585_out0: endpoint {
+										status = "okay";
+										port-index = <1>;
+										bus-width = <2>;
+										remote-endpoint = <&imx585_csi_in0>;
+									};
+								};
+							};
+						};
+					};
+					i2c@1 {
+						status = "okay";
+						reg = <1>;
+						#address-cells = <1>;
+						#size-cells = <0>;
+						rbpcv2_imx219_c@10 {
+							status = "disabled";
+						};
+						imx585_c@1a {
+							reset-gpios = <&gpio CAM1_PWDN GPIO_ACTIVE_HIGH>;
+							// TODO: Verify compatible string for IMX585
+							compatible = "sony,imx585";
+							reg = <0x1a>;
+							devnode = "video1";
+							// TODO: Verify physical dimensions for IMX585
+							physical_w = "8.45";
+							physical_h = "7.07";
+							sensor_model = "imx585";
+							use_sensor_mode_id = "true";
+							mode0 {
+								// TODO: Verify all timing parameters for IMX585
+								mclk_khz = "24000";
+								num_lanes = "2";
+								tegra_sinterface = "serial_c";
+								phy_mode = "DPHY";
+								discontinuous_clk = "no";
+								dpcm_enable = "false";
+								cil_settletime = "0";
+								// TODO: Verify lane_polarity for your hardware
+								lane_polarity = "0";
+								// TODO: Verify resolution and timing for IMX585
+								active_w = "3856";
+								active_h = "2180";
+								mode_type = "bayer";
+								pixel_phase = "rggb";
+								csi_pixel_bit_depth = "10";
+								readout_orientation = "90";
+								line_length = "11200";
+								inherent_gain = "1";
+								mclk_multiplier = "80";
+								pix_clk_hz = "300000000";
+								gain_factor = "16";
+								framerate_factor = "1000000";
+								exposure_factor = "1000000";
+								// TODO: Verify gain range for IMX585
+								min_gain_val = "16";
+								max_gain_val = "356";
+								step_gain_val = "1";
+								default_gain = "16";
+								min_hdr_ratio = "1";
+								max_hdr_ratio = "1";
+								// TODO: Verify framerate range for IMX585
+								min_framerate = "2000000";
+								max_framerate = "30000000";
+								step_framerate = "1";
+								default_framerate = "30000000";
+								// TODO: Verify exposure time range for IMX585
+								min_exp_time = "13";
+								max_exp_time = "683709";
+								step_exp_time = "1";
+								default_exp_time = "2495";
+								embedded_metadata_height = "2";
+							};
+							ports {
+								#address-cells = <1>;
+								#size-cells = <0>;
+								port@0 {
+									reg = <0>;
+									imx585_out1: endpoint {
+										status = "okay";
+										port-index = <2>;
+										bus-width = <2>;
+										remote-endpoint = <&imx585_csi_in1>;
+									};
+								};
+							};
+						};
+					};
+				};
 
-		};
-	};
-
-	csi_frag: fragment@101 {
-		target = <&csi1>;
-		csi: __overlay__ {
-			status = "okay";
-			brcm,media-controller;
-
-			port {
-				csi_ep: endpoint {
-					remote-endpoint = <&cam_endpoint>;
+				gpio@6000d000 {
+					camera-control-output-low {
+						gpio-hog;
+						output-low;
+						gpios = <CAM1_PWDN 0  CAM0_PWDN 0>;
+						label = "cam1-pwdn", "cam0-pwdn";
+					};
 				};
 			};
 		};
-	};
-
-	fragment@102 {
-		target = <&i2c0if>;
-		__overlay__ {
-			status = "okay";
-		};
-	};
-
-	clk_frag: fragment@103 {
-		target = <&cam1_clk>;
-		cam_clk: __overlay__ {
-			status = "okay";
-			clock-frequency = <24000000>;
-		};
-	};
-
-	fragment@104 {
-		target = <&i2c0mux>;
-		__overlay__ {
-			status = "okay";
-		};
-	};
-
-	__overrides__ {
-		2lane = <0>, "-0+1-2+3";
-		always-on = <0>, "+99";
-		rotation    = <&cam_node>,"rotation:0";
-		orientation = <&cam_node>,"orientation:0";
-		sync-mode = <&cam_node>,"sony,sync-mode";
-		media-controller = <&csi>,"brcm,media-controller?";
-		cam0 = <&i2c_frag>, "target:0=",<&i2c_csi_dsi0>,
-		       <&csi_frag>, "target:0=",<&csi0>,
-		       <&clk_frag>, "target:0=",<&cam0_clk>,
-		       <&cam_node>, "clocks:0=",<&cam0_clk>,
-		       <&reg_alwayson_frag>, "target:0=",<&cam0_reg>,
-		       <&cam_node>, "vana-supply:0=",<&cam0_reg>;
-		link-frequency = <&cam_endpoint>,"link-frequencies#0";
-		mono = <&cam_node>,"mono-mode:0=1";
 	};
 };
