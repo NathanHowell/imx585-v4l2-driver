@@ -1621,6 +1621,8 @@ static int imx585_probe(struct i2c_client *client)
 
 	v4l2_i2c_subdev_init(&imx585->sd, client, &imx585_subdev_ops);
 	imx585->clientdev = dev;
+	strscpy(imx585->sd.name, "imx585", sizeof(imx585->sd.name));
+	strscpy(imx585->sd.entity.name, "imx585", sizeof(imx585->sd.entity.name));
 
 	dev_info(dev, "Reading dtoverlay config:\n");
 	imx585->mono = of_property_read_bool(dev->of_node, "mono-mode");
