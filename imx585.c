@@ -1859,8 +1859,7 @@ static int imx585_probe(struct i2c_client *client)
 		goto err_entity;
 	}
 
-	if (imx585->sd.entity.num_pads && imx585->sd.active_state &&
-	    !imx585->sd.active_state->pads) {
+	if (imx585->sd.entity.num_pads && imx585->sd.active_state) {
 		struct v4l2_subdev_state *state =
 			v4l2_subdev_get_unlocked_active_state(&imx585->sd);
 		struct v4l2_subdev_format fmt = {
@@ -1879,17 +1878,22 @@ static int imx585_probe(struct i2c_client *client)
 			},
 		};
 
-		state->pads = kvcalloc(imx585->sd.entity.num_pads,
-				      sizeof(*state->pads), GFP_KERNEL);
 		if (!state->pads) {
-			ret = -ENOMEM;
-			goto err_entity;
+			state->pads = kvcalloc(imx585->sd.entity.num_pads,
+					      sizeof(*state->pads), GFP_KERNEL);
+			if (!state->pads) {
+				ret = -ENOMEM;
+				goto err_entity;
+			}
+			dev_dbg(dev,
+				"probe: allocated pad storage state=%p pads=%p\n",
+				state, state->pads);
 		}
 
 		imx585_set_pad_format(&imx585->sd, state, &fmt);
 		dev_dbg(dev,
-			"probe: allocated default pad format state=%p pads=%p\n",
-			state, state->pads);
+			"probe: seeded active format code=0x%x %ux%u\n",
+			fmt.format.code, fmt.format.width, fmt.format.height);
 	}
 	dev_info(dev, "probe: subdev init finalized (active_state=%p lock=%p pads=%p)\n",
 		imx585->sd.active_state,
