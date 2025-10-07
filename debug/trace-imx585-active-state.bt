@@ -59,8 +59,9 @@ kretprobe:v4l2_subdev_init_finalize
                retval, $sd, $state,
                $state ? $state->lock : 0,
                $state ? $state->pads : 0);
-        if ($state)
+        if ($state) {
             @imx585_state = (u64)$state;
+        }
     }
 }
 
