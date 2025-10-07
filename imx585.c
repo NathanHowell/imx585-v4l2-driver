@@ -15,6 +15,7 @@
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/slab.h>
 #include <linux/unaligned.h>
 
 #include <media/v4l2-cci.h>
@@ -1808,6 +1809,39 @@ static int imx585_probe(struct i2c_client *client)
 	if (ret) {
 		dev_err_probe(dev, ret, "subdev init\n");
 		goto err_entity;
+	}
+
+	if (imx585->sd.entity.num_pads && imx585->sd.active_state &&
+	    !imx585->sd.active_state->pads) {
+		struct v4l2_subdev_state *state =
+			v4l2_subdev_get_unlocked_active_state(&imx585->sd);
+		struct v4l2_subdev_format fmt = {
+			.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+			.pad = 0,
+			.format = {
+				.code = imx585->mono ? MEDIA_BUS_FMT_Y12_1X12
+					      : MEDIA_BUS_FMT_SRGGB12_1X12,
+				.width = supported_modes[0].width,
+				.height = supported_modes[0].height,
+				.field = V4L2_FIELD_NONE,
+				.colorspace = V4L2_COLORSPACE_RAW,
+				.ycbcr_enc = V4L2_YCBCR_ENC_601,
+				.quantization = V4L2_QUANTIZATION_FULL_RANGE,
+				.xfer_func = V4L2_XFER_FUNC_NONE,
+			},
+		};
+
+		state->pads = kvcalloc(imx585->sd.entity.num_pads,
+				      sizeof(*state->pads), GFP_KERNEL);
+		if (!state->pads) {
+			ret = -ENOMEM;
+			goto err_entity;
+		}
+
+		imx585_set_pad_format(&imx585->sd, state, &fmt);
+		dev_dbg(dev,
+			"probe: allocated default pad format state=%p pads=%p\n",
+			state, state->pads);
 	}
 	dev_info(dev, "probe: subdev init finalized (active_state=%p lock=%p pads=%p)\n",
 		imx585->sd.active_state,
