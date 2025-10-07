@@ -12,8 +12,8 @@ BEGIN
 
 kprobe:imx585_init_state
 {
-    @imx585_sd = arg0;
-    @imx585_state = arg1;
+    @imx585_sd = (int64)arg0;
+    @imx585_state = (int64)arg1;
     printf("imx585_init_state: sd=%p state=%p\n", arg0, arg1);
 }
 
@@ -74,7 +74,7 @@ kprobe:__v4l2_subdev_state_get_format
         printf("__v4l2_subdev_state_get_format(state=NULL pad=%lu stream=%lu)\n",
                arg1, arg2);
         printf("  caller stack:\n%s\n", kstack());
-    } else if (arg0 == @imx585_state) {
+    } else if (@imx585_state && arg0 == @imx585_state) {
         printf("__v4l2_subdev_state_get_format(entry): state=%p pad=%lu stream=%lu\n",
                arg0, arg1, arg2);
     }
@@ -87,7 +87,7 @@ kretprobe:__v4l2_subdev_state_get_format
 
     if ($state == 0) {
         printf("__v4l2_subdev_state_get_format(exit): state=NULL fmt=%p\n", retval);
-    } else if ($state == @imx585_state) {
+    } else if (@imx585_state && $state == @imx585_state) {
         printf("__v4l2_subdev_state_get_format(exit): state=%p fmt=%p\n",
                $state, retval);
     }
