@@ -7,6 +7,7 @@ BEGIN
 {
     printf("Tracing imx585 focussed paths… ctrl-C to stop\n");
     @tracked_state = 0;
+    @init_state = 0;
 }
 
 kprobe:__v4l2_subdev_state_get_format
@@ -18,6 +19,11 @@ kprobe:__v4l2_subdev_state_get_format
                arg1, arg2);
         printf("  caller stack:\n%s\n", kstack());
         return;
+    }
+
+    if (!@tracked_state && @init_state) {
+        @tracked_state = @init_state;
+        printf("tracking subdev state via init finalize=%p\n", (void *)@tracked_state);
     }
 
     if (!@tracked_state) {
@@ -44,6 +50,15 @@ kretprobe:__v4l2_subdev_state_get_format
     }
 }
 
+kretprobe:videodev:v4l2_subdev_init_finalize
+{
+    $sd = (struct v4l2_subdev *)arg0;
+    $state = $sd->active_state;
+    @init_state = (int64)$state;
+    printf("v4l2_subdev_init_finalize exit: sd=%p active_state=%p flags=0x%x\n",
+           $sd, $state, $sd->flags);
+}
+
 kprobe:tegra_channel_init_subdevices
 {
     printf("tegra_channel_init_subdevices(chan=%p)\n", arg0);
@@ -54,12 +69,14 @@ kretprobe:tegra_channel_init_subdevices
     printf("tegra_channel_init_subdevices -> %d\n", retval);
 }
 
-kprobe:tegra_channel_fmts_bitmap_init
+kprobe:tegra_camera:tegra_channel_fmts_bitmap_init
 {
-    printf("tegra_channel_fmts_bitmap_init(chan=%p)\n", arg0);
+    printf("tegra_channel_fmts_bitmap_init entry: chan=%p tracked_state=%p init_state=%p\n",
+           arg0, (void *)@tracked_state, (void *)@init_state);
+    printf("  caller stack:\n%s\n", kstack());
 }
 
-kretprobe:tegra_channel_fmts_bitmap_init
+kretprobe:tegra_camera:tegra_channel_fmts_bitmap_init
 {
     printf("tegra_channel_fmts_bitmap_init -> %d\n", retval);
 }
