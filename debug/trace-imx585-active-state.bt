@@ -111,9 +111,10 @@ kretprobe:__v4l2_subdev_state_get_format
     $state = (struct v4l2_subdev_state *)arg0;
     $tracked_state = (struct v4l2_subdev_state *)@imx585_state;
 
-    if (!$state || ($tracked_state && $state == $tracked_state))
+    if (!$state || ($tracked_state && $state == $tracked_state)) {
         printf("__v4l2_subdev_state_get_format(exit): state=%p fmt=%p\n",
                $state, retval);
+    }
 }
 
 /* Tegra camera entry points for extra context. */
