@@ -778,21 +778,37 @@ static struct camera_common_sensor_ops imx585_common_ops = {
 
 static int imx585_board_setup(struct imx585 *priv)
 {
+	struct camera_common_data *s_data = priv->s_data;
+	struct device *dev = priv->dev;
 	u64 id_high, id_low;
 	int err;
 
+	err = imx585_power_on(s_data);
+	if (err) {
+		dev_err(dev, "failed to power on sensor (%d)\n", err);
+		return err;
+	}
+
 	err = cci_read(priv->regmap, IMX585_REG_MODEL_ID_MSB, &id_high, NULL);
 	if (err)
-		return err;
+		goto power_off;
 
 	err = cci_read(priv->regmap, IMX585_REG_MODEL_ID_LSB, &id_low, NULL);
 	if (err)
-		return err;
+		goto power_off;
 
 	dev_dbg(priv->dev, "IMX585 detected id 0x%02llx%02llx\n",
 		id_high & 0xff, id_low & 0xff);
 
+	err = imx585_power_off(s_data);
+	if (err)
+		dev_warn(dev, "sensor power off failed (%d)\n", err);
+
 	return 0;
+
+power_off:
+	imx585_power_off(s_data);
+	return err;
 }
 
 static int imx585_init_inck_sel(struct imx585 *priv)
