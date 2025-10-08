@@ -3,6 +3,10 @@ obj-m += imx585.o
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 INSTALL_MOD_DIR ?= kernel/drivers/media/i2c
 
+ccflags-y += -I$(src)/include -I$(KERNEL_SRC)/include -I$(KERNEL_SRC)/include/uapi
+
+KBUILD_EXTRA_SYMBOLS += $(src)/Module.symvers
+
 .PHONY: all modules modules_install clean
 
 all: modules
