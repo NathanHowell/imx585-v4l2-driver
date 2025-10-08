@@ -389,7 +389,13 @@ static const struct regmap_config imx585_regmap_config = {
 
 static inline struct imx585 *tegracam_to_imx585(struct tegracam_device *tc_dev)
 {
-	return (struct imx585 *)tegracam_get_privdata(tc_dev);
+	struct imx585 *priv;
+
+	priv = (struct imx585 *)tegracam_get_privdata(tc_dev);
+	if (priv)
+		return priv;
+
+	return i2c_get_clientdata(tc_dev->client);
 }
 
 static inline u32 imx585_get_min_hmax(const struct imx585 *priv,
@@ -821,6 +827,8 @@ static int imx585_probe(struct i2c_client *client)
 	mutex_init(&priv->lock);
 	priv->dev = dev;
 	priv->client = client;
+
+	i2c_set_clientdata(client, priv);
 
 	tc_dev = devm_kzalloc(dev, sizeof(*tc_dev), GFP_KERNEL);
 	if (!tc_dev)
